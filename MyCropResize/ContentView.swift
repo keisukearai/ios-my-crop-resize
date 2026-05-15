@@ -100,7 +100,7 @@ struct ContentView: View {
             }
             HStack(spacing: 10) {
                 featureChip(icon: "square.grid.2x2", label: "Presets")
-                featureChip(icon: "square.and.arrow.down", label: "Save PNG/JPEG")
+                featureChip(icon: "square.and.arrow.down", label: "Save JPEG/PNG")
             }
         }
         .padding(.top, 8)
