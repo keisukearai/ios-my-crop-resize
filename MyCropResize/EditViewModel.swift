@@ -11,7 +11,6 @@ final class EditViewModel: ObservableObject {
     @Published var selectedPreset: PresetSize? = nil
     @Published var widthText: String = ""
     @Published var heightText: String = ""
-    @Published var keepAspectRatio: Bool = false
     @Published var saveFormat: SaveFormat = .jpeg
     @Published var alertMessage: String = ""
     @Published var showAlert: Bool = false
@@ -30,9 +29,6 @@ final class EditViewModel: ObservableObject {
         widthText = "\(Int(size.width * scale))"
         heightText = "\(Int(size.height * scale))"
     }
-
-    var outputWidth: Int { Int(widthText) ?? Int(sourceImage.size.width) }
-    var outputHeight: Int { Int(heightText) ?? Int(sourceImage.size.height) }
 
     func applyPreset(_ preset: PresetSize) {
         selectedPreset = preset
@@ -74,41 +70,6 @@ final class EditViewModel: ObservableObject {
         )
     }
 
-    func onWidthChanged(_ newVal: String) {
-        guard keepAspectRatio, let w = Int(newVal), w > 0 else { return }
-        if let preset = selectedPreset, preset.width == w {
-            heightText = "\(preset.height)"
-            return
-        }
-        let (refW, refH) = effectiveAspectRatioDimensions()
-        guard refW > 0 else { return }
-        let h = Int(CGFloat(w) * refH / refW)
-        heightText = "\(h)"
-    }
-
-    func onHeightChanged(_ newVal: String) {
-        guard keepAspectRatio, let h = Int(newVal), h > 0 else { return }
-        if let preset = selectedPreset, preset.height == h {
-            widthText = "\(preset.width)"
-            return
-        }
-        let (refW, refH) = effectiveAspectRatioDimensions()
-        guard refH > 0 else { return }
-        let w = Int(CGFloat(h) * refW / refH)
-        widthText = "\(w)"
-    }
-
-    private func effectiveAspectRatioDimensions() -> (CGFloat, CGFloat) {
-        if imageDisplayRect.width > 0, imageDisplayRect.height > 0 {
-            let scaleX = sourceImage.size.width / imageDisplayRect.width
-            let scaleY = sourceImage.size.height / imageDisplayRect.height
-            let cropW = cropRect.width * scaleX
-            let cropH = cropRect.height * scaleY
-            if cropW > 0, cropH > 0 { return (cropW, cropH) }
-        }
-        return (sourceImage.size.width, sourceImage.size.height)
-    }
-
     private func imageCropRect() -> CGRect? {
         guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return nil }
         let scaleX = sourceImage.size.width / imageDisplayRect.width
@@ -128,13 +89,17 @@ final class EditViewModel: ObservableObject {
     }
 
     func process() {
-        let targetSize = CGSize(width: outputWidth, height: outputHeight)
-        guard targetSize.width > 0, targetSize.height > 0 else {
-            showError("Enter valid width and height.")
-            return
-        }
         let imgCropRect = imageCropRect()
-        guard let result = ImageProcessor.cropAndResize(sourceImage, cropRect: imgCropRect, targetSize: targetSize) else {
+        let result: UIImage?
+        if let preset = selectedPreset {
+            let targetSize = CGSize(width: preset.width, height: preset.height)
+            result = ImageProcessor.cropAndResize(sourceImage, cropRect: imgCropRect, targetSize: targetSize)
+        } else if let rect = imgCropRect {
+            result = ImageProcessor.crop(sourceImage, to: rect)
+        } else {
+            result = sourceImage
+        }
+        guard let result else {
             showError("Image processing failed.")
             return
         }
@@ -189,7 +154,6 @@ final class EditViewModel: ObservableObject {
     func reset() {
         processedImage = nil
         selectedPreset = nil
-        keepAspectRatio = false
         widthText = "\(Int(sourceImage.size.width * sourceImage.scale))"
         heightText = "\(Int(sourceImage.size.height * sourceImage.scale))"
         hasSaved = false

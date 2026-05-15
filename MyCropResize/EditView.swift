@@ -117,7 +117,7 @@ struct EditView: View {
                                     set: { vm.cropRect = $0; vm.onManualCropChanged() }
                                 ),
                                 imageRect: visibleImageRect.isNull ? effRect : visibleImageRect,
-                                aspectRatio: .free
+                                aspectRatio: vm.selectedPreset.map { CGFloat($0.width) / CGFloat($0.height) }
                             )
                         }
                         .onAppear {
@@ -241,46 +241,35 @@ struct EditView: View {
         }
     }
 
-    // MARK: - Resize + Format
+    // MARK: - Output Format + Info
 
     private var resizeSection: some View {
         sectionCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    Text("Output Size (px)")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Spacer()
-                    Picker("Format", selection: $vm.saveFormat) {
-                        ForEach(SaveFormat.allCases, id: \.self) { fmt in
-                            Text(fmt.rawValue).tag(fmt)
-                        }
+            HStack(spacing: 12) {
+                if let preset = vm.selectedPreset {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Resize to")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("\(preset.width) × \(preset.height) px")
+                            .font(.subheadline.bold())
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 120)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Crop only")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("\(vm.widthText) × \(vm.heightText) px")
+                            .font(.subheadline.bold())
+                    }
                 }
-
-                HStack(spacing: 12) {
-                    pixelField(label: "Width", text: $vm.widthText, onCommit: { vm.onWidthChanged(vm.widthText) })
-                    Text("×").foregroundStyle(.secondary)
-                    pixelField(label: "Height", text: $vm.heightText, onCommit: { vm.onHeightChanged(vm.heightText) })
+                Spacer()
+                Picker("Format", selection: $vm.saveFormat) {
+                    ForEach(SaveFormat.allCases, id: \.self) { fmt in
+                        Text(fmt.rawValue).tag(fmt)
+                    }
                 }
-
-                Toggle(isOn: $vm.keepAspectRatio) {
-                    Label("Keep Aspect Ratio", systemImage: "lock.open.rotation")
-                        .font(.subheadline)
-                }
+                .pickerStyle(.segmented)
+                .frame(width: 120)
             }
-        }
-    }
-
-    private func pixelField(label: String, text: Binding<String>, onCommit: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            TextField(label, text: text)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: .infinity)
-                .onChange(of: text.wrappedValue) { _, newVal in onCommit() }
         }
     }
 
@@ -291,7 +280,7 @@ struct EditView: View {
             Button {
                 vm.process()
             } label: {
-                Label("Crop & Resize", systemImage: "wand.and.stars")
+                Label(vm.selectedPreset != nil ? "Crop & Resize" : "Crop", systemImage: "wand.and.stars")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())

@@ -3,7 +3,7 @@ import SwiftUI
 struct CropOverlayView: View {
     @Binding var cropRect: CGRect
     let imageRect: CGRect
-    let aspectRatio: AspectRatio
+    let aspectRatio: CGFloat?
 
     @State private var dragStart: CGPoint = .zero
     @State private var startRect: CGRect = .zero
@@ -125,7 +125,7 @@ struct CropOverlayView: View {
         switch corner {
         case .topLeft:
             let rawDy: CGFloat
-            if let ar = aspectRatio.value {
+            if let ar = aspectRatio {
                 rawDy = dx / ar
                 x = rect.minX + dx; w = max(minSize, rect.width - dx)
                 y = rect.minY + rawDy; h = max(minSize, rect.height - rawDy)
@@ -134,7 +134,7 @@ struct CropOverlayView: View {
                 y = rect.minY + dy; h = max(minSize, rect.height - dy)
             }
         case .topRight:
-            if let ar = aspectRatio.value {
+            if let ar = aspectRatio {
                 let rawDy = -dx / ar
                 w = max(minSize, rect.width + dx)
                 y = rect.minY + rawDy; h = max(minSize, rect.height - rawDy)
@@ -143,7 +143,7 @@ struct CropOverlayView: View {
                 y = rect.minY + dy; h = max(minSize, rect.height - dy)
             }
         case .bottomLeft:
-            if let ar = aspectRatio.value {
+            if let ar = aspectRatio {
                 let rawDy = -dx / ar
                 x = rect.minX + dx; w = max(minSize, rect.width - dx)
                 h = max(minSize, rect.height + rawDy)
@@ -152,7 +152,7 @@ struct CropOverlayView: View {
                 h = max(minSize, rect.height + dy)
             }
         case .bottomRight:
-            if let ar = aspectRatio.value {
+            if let ar = aspectRatio {
                 w = max(minSize, rect.width + dx)
                 h = max(minSize, w / ar)
             } else {

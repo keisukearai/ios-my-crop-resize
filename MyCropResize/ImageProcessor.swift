@@ -4,15 +4,23 @@ import CoreGraphics
 struct ImageProcessor {
 
     static func crop(_ image: UIImage, to rect: CGRect) -> UIImage? {
+        // rect is in UIImage logical point coordinates (orientation-aware).
+        // Use UIGraphicsImageRenderer so orientation is applied correctly,
+        // unlike cgImage.cropping(to:) which operates on raw pixel space.
         let scale = image.scale
-        let scaledRect = CGRect(
-            x: rect.origin.x * scale,
-            y: rect.origin.y * scale,
-            width: rect.size.width * scale,
-            height: rect.size.height * scale
-        )
-        guard let cgImage = image.cgImage?.cropping(to: scaledRect) else { return nil }
-        return UIImage(cgImage: cgImage, scale: scale, orientation: image.imageOrientation)
+        let outputSize = CGSize(width: rect.width * scale, height: rect.height * scale)
+        guard outputSize.width > 0, outputSize.height > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(
+                x: -rect.origin.x * scale,
+                y: -rect.origin.y * scale,
+                width: image.size.width * scale,
+                height: image.size.height * scale
+            ))
+        }
     }
 
     static func resize(_ image: UIImage, to size: CGSize) -> UIImage? {
