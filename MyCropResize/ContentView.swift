@@ -1,9 +1,11 @@
 import SwiftUI
 import PhotosUI
+import Photos
 
 struct ContentView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var selectedImage: UIImage? = nil
+    @State private var selectedImageFilename: String? = nil
     @State private var showEdit = false
     @State private var isLoading = false
     @ObservedObject private var recentStore = RecentImagesStore.shared
@@ -28,7 +30,7 @@ struct ContentView: View {
             }
             .navigationDestination(isPresented: $showEdit) {
                 if let img = selectedImage {
-                    EditView(image: img)
+                    EditView(image: img, filename: selectedImageFilename)
                 }
             }
         }
@@ -36,9 +38,20 @@ struct ContentView: View {
             guard let newItem else { return }
             isLoading = true
             Task {
+                var filename: String? = nil
+                if let identifier = newItem.itemIdentifier {
+                    let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+                    if status == .authorized || status == .limited {
+                        let assets = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+                        if let asset = assets.firstObject {
+                            filename = PHAssetResource.assetResources(for: asset).first?.originalFilename
+                        }
+                    }
+                }
                 if let data = try? await newItem.loadTransferable(type: Data.self),
                    let uiImage = UIImage(data: data) {
                     selectedImage = uiImage
+                    selectedImageFilename = filename
                     showEdit = true
                 }
                 isLoading = false
@@ -113,7 +126,7 @@ struct ContentView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("最近編集した画像")
+            Text("Recently Edited Images")
                 .font(.headline)
                 .padding(.horizontal, 32)
 
@@ -170,6 +183,7 @@ struct ContentView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: Color.accentColor.opacity(0.35), radius: 8, y: 4)
         }
+        .simultaneousGesture(TapGesture().onEnded { selectedItem = nil })
         .padding(.horizontal, 32)
         .disabled(isLoading)
     }
@@ -239,84 +253,96 @@ struct RecentThumbnailView: View {
 struct AppLogoView: View {
     var body: some View {
         GeometryReader { geo in
-            let size = geo.size.width
+            let s = geo.size.width
             ZStack {
-                RoundedRectangle(cornerRadius: size * 0.24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(red: 0, green: 0.4, blue: 0.8),
-                                     Color(red: 0.04, green: 0.24, blue: 0.59)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-
-                ResizeFrameShape(size: size)
-                    .stroke(Color.white, lineWidth: size * 0.045)
-                    .padding(size * 0.22)
-
-                ResizeArrowsShape(size: size)
+                // Radial gradient background
+                RadialGradient(
+                    colors: [Color(red: 0.24, green: 0.48, blue: 0.83),
+                             Color(red: 0.07, green: 0.20, blue: 0.55)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: s * 0.72
+                )
+                // Semi-transparent rounded square overlay
+                RoundedRectangle(cornerRadius: s * 0.15)
+                    .fill(Color.white.opacity(0.14))
+                    .padding(s * 0.098)
+                // Corner crop arrows (pointing inward)
+                IconCropCornersShape(s: s)
                     .fill(Color.white)
+                // Inner frame, midpoint guides, crosshair
+                IconFrameLinesShape(s: s)
+                    .stroke(Color.white, lineWidth: s * 0.013)
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 }
 
-struct ResizeFrameShape: Shape {
-    let size: CGFloat
+struct IconCropCornersShape: Shape {
+    let s: CGFloat
     func path(in rect: CGRect) -> Path {
-        let pad = size * 0.22
-        let inner = rect.insetBy(dx: pad, dy: pad + size * 0.04)
+        let pad = s * 0.098
+        let arm = s * 0.085
+        let lw  = s * 0.013
+        let tip = s * 0.026
+        // (cornerX, cornerY, hDir: +1=right/-1=left, vDir: +1=down/-1=up)
+        let corners: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
+            (pad,   pad,   1,  1),
+            (s-pad, pad,  -1,  1),
+            (pad,   s-pad, 1, -1),
+            (s-pad, s-pad,-1, -1),
+        ]
         var p = Path()
-        p.addRoundedRect(in: inner, cornerSize: CGSize(width: size * 0.06, height: size * 0.06))
+        for (cx, cy, hd, vd) in corners {
+            let hEnd = cx + hd * arm
+            let vEnd = cy + vd * arm
+            // Horizontal arm
+            p.addRect(CGRect(x: min(cx, hEnd), y: cy - lw/2, width: arm, height: lw))
+            // Horizontal arrowhead
+            p.move(to: CGPoint(x: hEnd, y: cy))
+            p.addLine(to: CGPoint(x: hEnd - hd*tip, y: cy - tip*0.6))
+            p.addLine(to: CGPoint(x: hEnd - hd*tip, y: cy + tip*0.6))
+            p.closeSubpath()
+            // Vertical arm
+            p.addRect(CGRect(x: cx - lw/2, y: min(cy, vEnd), width: lw, height: arm))
+            // Vertical arrowhead
+            p.move(to: CGPoint(x: cx, y: vEnd))
+            p.addLine(to: CGPoint(x: cx - tip*0.6, y: vEnd - vd*tip))
+            p.addLine(to: CGPoint(x: cx + tip*0.6, y: vEnd - vd*tip))
+            p.closeSubpath()
+        }
         return p
     }
 }
 
-struct ResizeArrowsShape: Shape {
-    let size: CGFloat
+struct IconFrameLinesShape: Shape {
+    let s: CGFloat
     func path(in rect: CGRect) -> Path {
-        let pad = size * 0.22
-        let inner = rect.insetBy(dx: pad, dy: pad + size * 0.04)
-        let arm: CGFloat = size * 0.14
-        let tip: CGFloat = size * 0.05
-        let lw:  CGFloat = size * 0.045
-
-        let corners: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
-            (inner.minX, inner.minY, -1, -1),
-            (inner.maxX, inner.minY,  1, -1),
-            (inner.minX, inner.maxY, -1,  1),
-            (inner.maxX, inner.maxY,  1,  1),
-        ]
-
+        let inner = CGRect(x: s*0.193, y: s*0.254, width: s*0.614, height: s*0.492)
+        let cr    = CGSize(width: s*0.057, height: s*0.057)
+        let ext   = s * 0.025
+        let ca    = s * 0.033
+        let mx    = inner.midX
+        let my    = inner.midY
         var p = Path()
-        for (cx, cy, dx, dy) in corners {
-            let ox = cx + dx * (size * 0.035)
-            let oy = cy + dy * (size * 0.035)
-            // horizontal arm
-            let hx = ox + dx * arm
-            p.addRect(CGRect(
-                x: min(ox, hx), y: oy - lw/2,
-                width: arm, height: lw
-            ))
-            // h arrowhead
-            p.move(to: CGPoint(x: hx, y: oy))
-            p.addLine(to: CGPoint(x: hx - dx*tip, y: oy - tip*0.6))
-            p.addLine(to: CGPoint(x: hx - dx*tip, y: oy + tip*0.6))
-            p.closeSubpath()
-            // vertical arm
-            let vy = oy + dy * arm
-            p.addRect(CGRect(
-                x: ox - lw/2, y: min(oy, vy),
-                width: lw, height: arm
-            ))
-            // v arrowhead
-            p.move(to: CGPoint(x: ox, y: vy))
-            p.addLine(to: CGPoint(x: ox - tip*0.6, y: vy - dy*tip))
-            p.addLine(to: CGPoint(x: ox + tip*0.6, y: vy - dy*tip))
-            p.closeSubpath()
-        }
+        // Inner rounded rectangle
+        p.addRoundedRect(in: inner, cornerSize: cr)
+        // Midpoint guide markers
+        p.move(to: CGPoint(x: mx, y: inner.minY - ext))
+        p.addLine(to: CGPoint(x: mx, y: inner.minY + ext))
+        p.move(to: CGPoint(x: mx, y: inner.maxY - ext))
+        p.addLine(to: CGPoint(x: mx, y: inner.maxY + ext))
+        p.move(to: CGPoint(x: inner.minX - ext, y: my))
+        p.addLine(to: CGPoint(x: inner.minX + ext, y: my))
+        p.move(to: CGPoint(x: inner.maxX - ext, y: my))
+        p.addLine(to: CGPoint(x: inner.maxX + ext, y: my))
+        // Center crosshair
+        p.move(to: CGPoint(x: mx - ca, y: my))
+        p.addLine(to: CGPoint(x: mx + ca, y: my))
+        p.move(to: CGPoint(x: mx, y: my - ca))
+        p.addLine(to: CGPoint(x: mx, y: my + ca))
         return p
     }
 }

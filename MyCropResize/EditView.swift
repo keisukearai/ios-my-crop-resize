@@ -3,23 +3,28 @@ import SwiftUI
 struct EditView: View {
     @StateObject private var vm: EditViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var isFullScreenPresented = false
+    @State private var imageScale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var imageOffset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var previewViewSize: CGSize = .zero
 
-    init(image: UIImage) {
-        _vm = StateObject(wrappedValue: EditViewModel(image: image))
+    init(image: UIImage, filename: String? = nil) {
+        _vm = StateObject(wrappedValue: EditViewModel(image: image, filename: filename))
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 10) {
+                imageInfoSection
                 imagePreviewSection
-                cropToggleSection
-                if vm.isCropEnabled { aspectRatioSection }
                 presetSection
                 resizeSection
-                formatSection
                 actionButtons
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 10)
         }
         .navigationTitle("Edit Screenshot")
         .navigationBarTitleDisplayMode(.inline)
@@ -31,56 +36,150 @@ struct EditView: View {
         .overlay(saveSuccessBanner, alignment: .top)
     }
 
+    // MARK: - Image Info
+
+    private var imageInfoSection: some View {
+        HStack(spacing: 10) {
+            if let name = vm.filename {
+                Text(name)
+                    .font(.caption.bold())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Text("\(Int(vm.sourceImage.size.width * vm.sourceImage.scale)) × \(Int(vm.sourceImage.size.height * vm.sourceImage.scale)) px")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     // MARK: - Image Preview
 
     private var imagePreviewSection: some View {
-        ZStack {
-            Color(.systemGray6)
-            if let processed = vm.processedImage {
-                Image(uiImage: processed)
-                    .resizable()
-                    .scaledToFit()
-                    .overlay(alignment: .topTrailing) {
-                        Label("Processed", systemImage: "checkmark.seal.fill")
-                            .font(.caption2.bold())
-                            .foregroundStyle(.white)
-                            .padding(6)
-                            .background(Color.green.opacity(0.85))
-                            .clipShape(Capsule())
-                            .padding(8)
-                    }
-            } else {
-                GeometryReader { geo in
-                    let imgSize = vm.sourceImage.size
-                    let displayRect = fitRect(imageSize: imgSize, in: geo.size)
-                    Image(uiImage: vm.sourceImage)
+        VStack(spacing: 0) {
+            ZStack {
+                Color(.systemGray6)
+                if let processed = vm.processedImage {
+                    Image(uiImage: processed)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .overlay {
-                            if vm.isCropEnabled {
-                                CropOverlayView(
-                                    cropRect: $vm.cropRect,
-                                    imageRect: displayRect,
-                                    aspectRatio: vm.selectedAspectRatio
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.white)
+                                .padding(6)
+                                .background(Color.black.opacity(0.45))
+                                .clipShape(Circle())
+                                .padding(8)
+                        }
+                        .onTapGesture { isFullScreenPresented = true }
+                        .contentShape(Rectangle())
+                } else {
+                    GeometryReader { geo in
+                        let imgSize = vm.sourceImage.size
+                        let baseRect = fitRect(imageSize: imgSize, in: geo.size)
+                        let effRect = effectiveDisplayRect(base: baseRect, viewSize: geo.size, scale: imageScale, offset: imageOffset)
+                        let visibleImageRect = effRect.intersection(CGRect(origin: .zero, size: geo.size))
+                        ZStack {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 4)
+                                        .onChanged { value in
+                                            let newOff = CGSize(
+                                                width: lastOffset.width + value.translation.width,
+                                                height: lastOffset.height + value.translation.height
+                                            )
+                                            let dx = newOff.width - imageOffset.width
+                                            let dy = newOff.height - imageOffset.height
+                                            imageOffset = newOff
+                                            vm.cropRect = vm.cropRect.offsetBy(dx: dx, dy: dy)
+                                            vm.imageDisplayRect = effectiveDisplayRect(
+                                                base: baseRect, viewSize: geo.size,
+                                                scale: imageScale, offset: newOff
+                                            )
+                                        }
+                                        .onEnded { _ in lastOffset = imageOffset }
                                 )
-                            }
+                            Image(uiImage: vm.sourceImage)
+                                .resizable()
+                                .frame(width: effRect.width, height: effRect.height)
+                                .position(x: effRect.midX, y: effRect.midY)
+                                .allowsHitTesting(false)
+                            CropOverlayView(
+                                cropRect: Binding(
+                                    get: { vm.cropRect },
+                                    set: { vm.cropRect = $0; vm.onManualCropChanged() }
+                                ),
+                                imageRect: visibleImageRect.isNull ? effRect : visibleImageRect,
+                                aspectRatio: .free
+                            )
                         }
                         .onAppear {
-                            vm.imageDisplayRect = displayRect
+                            previewViewSize = geo.size
+                            vm.imageDisplayRect = baseRect
                             vm.initCropRect()
                         }
                         .onChange(of: geo.size) { _, newSize in
+                            previewViewSize = newSize
                             let r = fitRect(imageSize: imgSize, in: newSize)
+                            imageScale = 1; lastScale = 1
+                            imageOffset = .zero; lastOffset = .zero
                             vm.imageDisplayRect = r
+                            vm.initCropRect()
                         }
+                    }
+                    .frame(height: 220)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                guard previewViewSize.width > 0 else { return }
+                                let newScale = max(1, lastScale * value)
+                                let base = fitRect(imageSize: vm.sourceImage.size, in: previewViewSize)
+                                imageScale = newScale
+                                let newEff = effectiveDisplayRect(base: base, viewSize: previewViewSize, scale: newScale, offset: imageOffset)
+                                vm.imageDisplayRect = newEff
+                                let visibleBounds = newEff.intersection(CGRect(origin: .zero, size: previewViewSize))
+                                if !visibleBounds.isNull {
+                                    vm.cropRect = clampedRect(vm.cropRect, to: visibleBounds)
+                                }
+                            }
+                            .onEnded { _ in lastScale = imageScale }
+                    )
                 }
-                .frame(height: 300)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            if let processed = vm.processedImage {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(Color.green)
+                    Text("Processed")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("\(Int(processed.size.width * processed.scale)) × \(Int(processed.size.height * processed.scale)) px")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 6)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: vm.processedImage != nil ? nil : 300)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .fullScreenCover(isPresented: $isFullScreenPresented) {
+            if let processed = vm.processedImage {
+                ImageFullScreenView(image: processed)
+            }
+        }
     }
 
     private func fitRect(imageSize: CGSize, in containerSize: CGSize) -> CGRect {
@@ -92,44 +191,28 @@ struct EditView: View {
         return CGRect(x: x, y: y, width: fitW, height: fitH)
     }
 
-    // MARK: - Crop
-
-    private var cropToggleSection: some View {
-        sectionCard {
-            Toggle(isOn: $vm.isCropEnabled) {
-                Label("Enable Crop", systemImage: "crop")
-                    .fontWeight(.medium)
-            }
-            .onChange(of: vm.isCropEnabled) { _, enabled in
-                if enabled { vm.initCropRect() }
-            }
-        }
+    private func effectiveDisplayRect(base: CGRect, viewSize: CGSize, scale: CGFloat, offset: CGSize) -> CGRect {
+        let c = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        let newW = base.width * scale
+        let newH = base.height * scale
+        let cx = c.x + (base.midX - c.x) * scale + offset.width
+        let cy = c.y + (base.midY - c.y) * scale + offset.height
+        return CGRect(x: cx - newW / 2, y: cy - newH / 2, width: newW, height: newH)
     }
 
-    private var aspectRatioSection: some View {
-        sectionCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Aspect Ratio")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(AspectRatio.allCases, id: \.self) { ratio in
-                            Button(ratio.rawValue) {
-                                vm.selectedAspectRatio = ratio
-                            }
-                            .buttonStyle(ChipButtonStyle(isSelected: vm.selectedAspectRatio == ratio))
-                        }
-                    }
-                }
-            }
-        }
+    private func clampedRect(_ rect: CGRect, to bounds: CGRect) -> CGRect {
+        let w = min(rect.width, bounds.width)
+        let h = min(rect.height, bounds.height)
+        let x = max(bounds.minX, min(rect.minX, bounds.maxX - w))
+        let y = max(bounds.minY, min(rect.minY, bounds.maxY - h))
+        return CGRect(x: x, y: y, width: w, height: h)
     }
 
     // MARK: - Presets
 
     private var presetSection: some View {
         sectionCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Preset Sizes")
                     .font(.subheadline).foregroundStyle(.secondary)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -139,8 +222,13 @@ struct EditView: View {
                                 vm.applyPreset(preset)
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(preset.name)
-                                        .font(.caption.bold())
+                                    HStack(alignment: .lastTextBaseline, spacing: 1) {
+                                        Text(preset.name)
+                                            .font(.caption.bold())
+                                        Text("in")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(.secondary)
+                                    }
                                     Text("\(preset.width)×\(preset.height)")
                                         .font(.caption2)
                                 }
@@ -153,13 +241,23 @@ struct EditView: View {
         }
     }
 
-    // MARK: - Resize
+    // MARK: - Resize + Format
 
     private var resizeSection: some View {
         sectionCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Output Size (px)")
-                    .font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Text("Output Size (px)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Format", selection: $vm.saveFormat) {
+                        ForEach(SaveFormat.allCases, id: \.self) { fmt in
+                            Text(fmt.rawValue).tag(fmt)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 120)
+                }
 
                 HStack(spacing: 12) {
                     pixelField(label: "Width", text: $vm.widthText, onCommit: { vm.onWidthChanged(vm.widthText) })
@@ -183,25 +281,6 @@ struct EditView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: .infinity)
                 .onChange(of: text.wrappedValue) { _, newVal in onCommit() }
-        }
-    }
-
-    // MARK: - Format
-
-    private var formatSection: some View {
-        sectionCard {
-            HStack {
-                Label("Save Format", systemImage: "square.and.arrow.down")
-                    .font(.subheadline).fontWeight(.medium)
-                Spacer()
-                Picker("Format", selection: $vm.saveFormat) {
-                    ForEach(SaveFormat.allCases, id: \.self) { fmt in
-                        Text(fmt.rawValue).tag(fmt)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 130)
-            }
         }
     }
 
@@ -229,6 +308,8 @@ struct EditView: View {
 
                 Button {
                     vm.reset()
+                    imageScale = 1; lastScale = 1
+                    imageOffset = .zero; lastOffset = .zero
                 } label: {
                     Label("Reset", systemImage: "arrow.counterclockwise")
                         .frame(maxWidth: .infinity)
@@ -268,7 +349,8 @@ struct EditView: View {
 
     private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -328,5 +410,75 @@ struct ChipButtonStyle: ButtonStyle {
             .background(isSelected ? Color.accentColor : Color(.systemGray5))
             .clipShape(Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+// MARK: - Full Screen Image Viewer
+
+struct ImageFullScreenView: View {
+    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var showsControls = true
+
+    private var pixelSize: String {
+        "\(Int(image.size.width * image.scale)) × \(Int(image.size.height * image.scale)) px"
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { scale = max(1, lastScale * $0) }
+                        .onEnded { _ in lastScale = scale }
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation(.spring(duration: 0.3)) {
+                        scale = 1
+                        lastScale = 1
+                    }
+                }
+                .onTapGesture(count: 1) {
+                    withAnimation(.easeInOut(duration: 0.2)) { showsControls.toggle() }
+                }
+
+            if showsControls {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title)
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.5))
+                                .padding()
+                        }
+                    }
+                    Spacer()
+                    Text(pixelSize)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.bottom, 24)
+                }
+                .transition(.opacity)
+            }
+        }
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    guard scale == 1, value.translation.height > 80 else { return }
+                    dismiss()
+                }
+        )
     }
 }

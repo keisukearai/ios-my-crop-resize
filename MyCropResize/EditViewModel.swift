@@ -8,26 +8,27 @@ final class EditViewModel: ObservableObject {
     @Published var processedImage: UIImage?
     @Published var cropRect: CGRect = .zero
     @Published var imageDisplayRect: CGRect = .zero
-    @Published var selectedAspectRatio: AspectRatio = .free
     @Published var selectedPreset: PresetSize? = nil
     @Published var widthText: String = ""
     @Published var heightText: String = ""
-    @Published var keepAspectRatio: Bool = true
+    @Published var keepAspectRatio: Bool = false
     @Published var saveFormat: SaveFormat = .jpeg
-    @Published var isCropEnabled: Bool = false
     @Published var alertMessage: String = ""
     @Published var showAlert: Bool = false
     @Published var showSaveSuccess: Bool = false
     @Published var isSaving: Bool = false
     @Published var hasSaved: Bool = false
 
+    var filename: String?
     private var hasAddedToRecent = false
 
-    init(image: UIImage) {
+    init(image: UIImage, filename: String? = nil) {
         self.sourceImage = image
+        self.filename = filename
         let size = image.size
-        widthText = "\(Int(size.width))"
-        heightText = "\(Int(size.height))"
+        let scale = image.scale
+        widthText = "\(Int(size.width * scale))"
+        heightText = "\(Int(size.height * scale))"
     }
 
     var outputWidth: Int { Int(widthText) ?? Int(sourceImage.size.width) }
@@ -37,10 +38,48 @@ final class EditViewModel: ObservableObject {
         selectedPreset = preset
         widthText = "\(preset.width)"
         heightText = "\(preset.height)"
+        updateCropRectForPreset(preset)
+    }
+
+    func onManualCropChanged() {
+        guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return }
+        selectedPreset = nil
+        let scaleX = sourceImage.size.width * sourceImage.scale / imageDisplayRect.width
+        let scaleY = sourceImage.size.height * sourceImage.scale / imageDisplayRect.height
+        let pixelW = max(1, Int((cropRect.width * scaleX).rounded()))
+        let pixelH = max(1, Int((cropRect.height * scaleY).rounded()))
+        widthText = "\(pixelW)"
+        heightText = "\(pixelH)"
+    }
+
+    private func updateCropRectForPreset(_ preset: PresetSize) {
+        guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return }
+        let ar = CGFloat(preset.width) / CGFloat(preset.height)
+        let maxW = imageDisplayRect.width
+        let maxH = imageDisplayRect.height
+        let newW: CGFloat
+        let newH: CGFloat
+        if maxW / maxH > ar {
+            newH = maxH
+            newW = newH * ar
+        } else {
+            newW = maxW
+            newH = newW / ar
+        }
+        cropRect = CGRect(
+            x: imageDisplayRect.midX - newW / 2,
+            y: imageDisplayRect.midY - newH / 2,
+            width: newW,
+            height: newH
+        )
     }
 
     func onWidthChanged(_ newVal: String) {
         guard keepAspectRatio, let w = Int(newVal), w > 0 else { return }
+        if let preset = selectedPreset, preset.width == w {
+            heightText = "\(preset.height)"
+            return
+        }
         let (refW, refH) = effectiveAspectRatioDimensions()
         guard refW > 0 else { return }
         let h = Int(CGFloat(w) * refH / refW)
@@ -49,15 +88,18 @@ final class EditViewModel: ObservableObject {
 
     func onHeightChanged(_ newVal: String) {
         guard keepAspectRatio, let h = Int(newVal), h > 0 else { return }
+        if let preset = selectedPreset, preset.height == h {
+            widthText = "\(preset.width)"
+            return
+        }
         let (refW, refH) = effectiveAspectRatioDimensions()
         guard refH > 0 else { return }
         let w = Int(CGFloat(h) * refW / refH)
         widthText = "\(w)"
     }
 
-    // クロップが有効な場合はクロップ領域の、そうでなければ元画像のアスペクト比を返す
     private func effectiveAspectRatioDimensions() -> (CGFloat, CGFloat) {
-        if isCropEnabled, imageDisplayRect.width > 0, imageDisplayRect.height > 0 {
+        if imageDisplayRect.width > 0, imageDisplayRect.height > 0 {
             let scaleX = sourceImage.size.width / imageDisplayRect.width
             let scaleY = sourceImage.size.height / imageDisplayRect.height
             let cropW = cropRect.width * scaleX
@@ -67,9 +109,8 @@ final class EditViewModel: ObservableObject {
         return (sourceImage.size.width, sourceImage.size.height)
     }
 
-    // Convert display cropRect → image-space CGRect
     private func imageCropRect() -> CGRect? {
-        guard isCropEnabled, imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return nil }
+        guard imageDisplayRect.width > 0, imageDisplayRect.height > 0 else { return nil }
         let scaleX = sourceImage.size.width / imageDisplayRect.width
         let scaleY = sourceImage.size.height / imageDisplayRect.height
         let rel = CGRect(
@@ -147,12 +188,10 @@ final class EditViewModel: ObservableObject {
 
     func reset() {
         processedImage = nil
-        isCropEnabled = false
         selectedPreset = nil
-        selectedAspectRatio = .free
-        keepAspectRatio = true
-        widthText = "\(Int(sourceImage.size.width))"
-        heightText = "\(Int(sourceImage.size.height))"
+        keepAspectRatio = false
+        widthText = "\(Int(sourceImage.size.width * sourceImage.scale))"
+        heightText = "\(Int(sourceImage.size.height * sourceImage.scale))"
         hasSaved = false
         initCropRect()
     }
