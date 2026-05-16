@@ -274,6 +274,13 @@ platform :ios do
     upload_to_testflight(api_key: api_key)
   end
 
+  # 審査提出のみ（バイナリ提出済みの場合）
+  lane :submit do
+    client = make_asc_client
+    app_id = get_app_id(client)
+    submit_version(client, app_id)
+  end
+
   # App Store に申請
   lane :release do
     client = make_asc_client
