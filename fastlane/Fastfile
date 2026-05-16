@@ -10,16 +10,27 @@ platform :ios do
     )
   end
 
-  # App Store Connect にアプリを新規登録
+  # App Store Connect にアプリを新規登録（初回のみ）
   lane :register_app do
-    api_key  # グローバルコンテキストに設定
+    api_key
     produce(
       app_name: "MyCropResize",
       app_identifier: "com.keisukearai.MyCropResize",
       language: "Japanese",
       app_version: "1.0",
       sku: "mycropresize-001",
-      skip_devcenter: true,  # App ID は Xcode 側で作成済み
+      skip_devcenter: true,
+    )
+  end
+
+  # メタデータ・スクリーンショットのみアップロード
+  lane :upload_metadata do
+    upload_to_app_store(
+      api_key: api_key,
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
+      force: true,
     )
   end
 
@@ -56,6 +67,7 @@ platform :ios do
       api_key: api_key,
       submit_for_review: true,
       automatic_release: false,
+      overwrite_screenshots: true,
       force: true,
     )
   end
