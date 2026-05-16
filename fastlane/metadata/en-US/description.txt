@@ -5,7 +5,7 @@ Crop and resize your screenshots to the exact dimensions required by the App Sto
 [Features]
 
 ■ Preset Resize
-One-tap resize to standard App Store sizes: iPhone 6.7", 6.5", 5.5", iPad 13", and 12.9".
+One-tap resize to standard App Store sizes: iPhone 6.7", 6.5", and 5.5".
 
 ■ Free Crop
 Drag to select any area and crop freely, preserving the natural aspect ratio of your selection.
