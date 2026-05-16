@@ -10,19 +10,6 @@ platform :ios do
     )
   end
 
-  # App Store Connect にアプリを新規登録（初回のみ）
-  lane :register_app do
-    api_key
-    produce(
-      app_name: "MyCropResize",
-      app_identifier: "com.keisukearai.MyCropResize",
-      language: "Japanese",
-      app_version: "1.0",
-      sku: "mycropresize-001",
-      skip_devcenter: true,
-    )
-  end
-
   # メタデータのみアップロード
   lane :upload_metadata do
     upload_to_app_store(
@@ -51,40 +38,52 @@ platform :ios do
     )
   end
 
-  # TestFlight にアップロード
+  # TestFlight にアップロード（Xcode 自動署名を使用）
   lane :beta do
-    match(
-      api_key: api_key,
-      type: "appstore",
-      app_identifier: "com.keisukearai.MyCropResize",
-      readonly: true,
+    update_code_signing_settings(
+      use_automatic_signing: true,
+      path: "MyCropResize.xcodeproj",
+      team_id: "HFZSU3MJLR",
     )
     increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
     build_app(
       scheme: "MyCropResize",
       export_method: "app-store",
+      export_xcargs: "-allowProvisioningUpdates",
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "HFZSU3MJLR",
+      },
     )
     upload_to_testflight(api_key: api_key)
   end
 
-  # App Store に申請
+  # App Store に申請（Xcode 自動署名を使用）
   lane :release do
-    match(
-      api_key: api_key,
-      type: "appstore",
-      app_identifier: "com.keisukearai.MyCropResize",
-      readonly: true,
+    update_code_signing_settings(
+      use_automatic_signing: true,
+      path: "MyCropResize.xcodeproj",
+      team_id: "HFZSU3MJLR",
     )
     increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
     build_app(
       scheme: "MyCropResize",
       export_method: "app-store",
+      export_xcargs: "-allowProvisioningUpdates",
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "HFZSU3MJLR",
+      },
     )
     upload_to_app_store(
       api_key: api_key,
+      app_identifier: "com.keisukearai.MyCropResize",
+      app_version: "1.0",
       submit_for_review: true,
       automatic_release: false,
-      overwrite_screenshots: true,
+      skip_screenshots: true,
+      skip_metadata: true,
+      run_precheck_before_submit: false,
       force: true,
     )
   end
