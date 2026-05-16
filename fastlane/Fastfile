@@ -138,6 +138,26 @@ platform :ios do
     end
   end
 
+  # PREPARE_FOR_SUBMISSION 状態のバージョンを審査提出
+  def submit_version(client, app_id)
+    versions = client[:get].call("/v1/apps/#{app_id}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION")
+    version = versions["data"]&.first
+    UI.user_error!("No version in PREPARE_FOR_SUBMISSION state found") unless version
+    version_id = version["id"]
+    UI.message("Submitting version #{version.dig('attributes', 'versionString')} (#{version_id}) for review...")
+
+    code, result = client[:post].call("/v1/appStoreVersionSubmissions", {
+      data: {
+        type: "appStoreVersionSubmissions",
+        relationships: {
+          appStoreVersion: { data: { type: "appStoreVersions", id: version_id } }
+        }
+      }
+    }.to_json)
+
+    code == 201 ? UI.success("Submitted for review!") : UI.user_error!("Failed to submit: #{result}")
+  end
+
   # 年齢レーティング 4+ を設定（appInfos 経由）
   def ensure_age_rating(client, app_id)
     infos = client[:get].call("/v1/apps/#{app_id}/appInfos")
@@ -295,21 +315,8 @@ platform :ios do
     # 年齢レーティング 4+ を設定
     ensure_age_rating(client, app_id)
 
-    # 審査提出
-    upload_to_app_store(
-      api_key: api_key,
-      app_identifier: APP_BUNDLE_ID,
-      submit_for_review: true,
-      skip_binary_upload: true,
-      skip_screenshots: true,
-      skip_metadata: true,
-      run_precheck_before_submit: false,
-      force: true,
-      submission_information: {
-        export_compliance_uses_encryption: false,
-        content_rights_contains_third_party_content: false,
-      },
-    )
+    # 審査提出（ASC REST API で直接 POST）
+    submit_version(client, app_id)
   end
 
 end
