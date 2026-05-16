@@ -1,0 +1,62 @@
+default_platform(:ios)
+
+platform :ios do
+
+  def api_key
+    app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_filepath: ENV["ASC_KEY_FILEPATH"],
+    )
+  end
+
+  # App Store Connect にアプリを新規登録
+  lane :register_app do
+    produce(
+      api_key: api_key,
+      app_name: "MyCropResize",
+      app_identifier: "com.keisukearai.MyCropResize",
+      language: "Japanese",
+      app_version: "1.0",
+      sku: "mycropresize-001",
+    )
+  end
+
+  # TestFlight にアップロード
+  lane :beta do
+    match(
+      api_key: api_key,
+      type: "appstore",
+      app_identifier: "com.keisukearai.MyCropResize",
+      readonly: true,
+    )
+    increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
+    build_app(
+      scheme: "MyCropResize",
+      export_method: "app-store",
+    )
+    upload_to_testflight(api_key: api_key)
+  end
+
+  # App Store に申請
+  lane :release do
+    match(
+      api_key: api_key,
+      type: "appstore",
+      app_identifier: "com.keisukearai.MyCropResize",
+      readonly: true,
+    )
+    increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
+    build_app(
+      scheme: "MyCropResize",
+      export_method: "app-store",
+    )
+    upload_to_app_store(
+      api_key: api_key,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+    )
+  end
+
+end
