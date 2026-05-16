@@ -143,13 +143,26 @@ bundle exec fastlane beta --env local
 
 ```bash
 export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+
+# フルリリース（ビルド〜バイナリアップロードまで）
 bundle exec fastlane release --env local
+
+# 審査提出のみ（バイナリ提出済みの場合）
+bundle exec fastlane submit --env local
 ```
 
-**自動で行われること:**
-1. ビルド・アーカイブ・エクスポート（beta と同じ）
-2. App Store Connect にバイナリをアップロード
-3. 審査提出（`submit_for_review: true`）
+**`release` で自動で行われること:**
+1. 無料価格・配信地域・設定確認・設定
+2. ビルド・アーカイブ・エクスポート
+3. App Store Connect にバイナリをアップロード
+4. 年齢レーティング 4+ を設定
+
+**`submit` で自動で行われること:**
+1. `PREPARE_FOR_SUBMISSION` 状態のバージョンを取得
+2. `reviewSubmissions` API で提出物を作成
+3. バージョンをアイテムとして追加し審査提出
+
+> **注意:** Apple の新しい提出フロー（reviewSubmissions API）を使用。fastlane の `submit_for_review: true` は空提出物が作成されるため使用しない。
 
 ---
 
@@ -173,7 +186,8 @@ MATCH_PASSWORD=mycropresize2024
 | `fastlane upload_metadata --env local` | 説明文・キーワード等をアップロード |
 | `fastlane upload_screenshots --env local` | スクリーンショットをアップロード |
 | `fastlane beta --env local` | ビルド → TestFlight アップロード |
-| `fastlane release --env local` | ビルド → App Store 申請 |
+| `fastlane release --env local` | ビルド → App Store バイナリアップロード |
+| `fastlane submit --env local` | 審査提出のみ（バイナリ提出済みの場合） |
 
 ---
 
