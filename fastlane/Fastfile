@@ -258,8 +258,8 @@ platform :ios do
       app_review_information: {
         first_name: "Keisuke",
         last_name: "Arai",
-        phone_number: "+819042907348",
-        email_address: "araiautocom@gmail.com",
+        phone_number: ENV["REVIEW_PHONE"],
+        email_address: ENV["REVIEW_EMAIL"],
         demo_user: "",
         demo_password: "",
         notes: "No sign-in is required. All features are available immediately after launch.",
@@ -287,7 +287,7 @@ platform :ios do
     update_code_signing_settings(
       use_automatic_signing: true,
       path: "MyCropResize.xcodeproj",
-      team_id: "HFZSU3MJLR",
+      team_id: ENV["TEAM_ID"],
     )
     increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
     build_app(
@@ -296,7 +296,7 @@ platform :ios do
       export_xcargs: "-allowProvisioningUpdates",
       export_options: {
         signingStyle: "automatic",
-        teamID: "HFZSU3MJLR",
+        teamID: ENV["TEAM_ID"],
       },
     )
     upload_to_testflight(api_key: api_key)
@@ -319,7 +319,7 @@ platform :ios do
     update_code_signing_settings(
       use_automatic_signing: true,
       path: "MyCropResize.xcodeproj",
-      team_id: "HFZSU3MJLR",
+      team_id: ENV["TEAM_ID"],
     )
     increment_build_number(xcodeproj: "MyCropResize.xcodeproj")
     build_app(
@@ -328,7 +328,7 @@ platform :ios do
       export_xcargs: "-allowProvisioningUpdates",
       export_options: {
         signingStyle: "automatic",
-        teamID: "HFZSU3MJLR",
+        teamID: ENV["TEAM_ID"],
       },
     )
 

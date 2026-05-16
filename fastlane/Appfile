@@ -1,3 +1,3 @@
 app_identifier "com.keisukearai.MyCropResize"
-apple_id "araiautocom3@gmail.com"
-team_id "HFZSU3MJLR"
+apple_id ENV["APPLE_ID"]
+team_id ENV["TEAM_ID"]

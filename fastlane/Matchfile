@@ -1,5 +1,5 @@
-git_url("git@github.com:keisukearai/ios-certificates.git")
+git_url(ENV["MATCH_GIT_URL"])
 storage_mode("git")
 type("appstore")
 app_identifier(["com.keisukearai.MyCropResize"])
-username("araiautocom3@gmail.com")
+username(ENV["APPLE_ID"])
