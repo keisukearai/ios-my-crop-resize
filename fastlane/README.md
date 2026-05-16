@@ -15,10 +15,18 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
-### ios register_app
+### ios upload_metadata
 
 ```sh
-[bundle exec] fastlane ios register_app
+[bundle exec] fastlane ios upload_metadata
+```
+
+
+
+### ios upload_screenshots
+
+```sh
+[bundle exec] fastlane ios upload_screenshots
 ```
 
 
