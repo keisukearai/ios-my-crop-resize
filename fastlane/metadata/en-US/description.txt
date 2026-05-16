@@ -1,0 +1,24 @@
+MyCropResize is a screenshot preparation tool built for iOS developers.
+
+Crop and resize your screenshots to the exact dimensions required by the App Store — in just a few taps.
+
+[Features]
+
+■ Preset Resize
+One-tap resize to standard App Store sizes: iPhone 6.7", 6.5", 5.5", iPad 13", and 12.9".
+
+■ Free Crop
+Drag to select any area and crop freely, preserving the natural aspect ratio of your selection.
+
+■ JPEG / PNG Export
+Choose your preferred format and save directly to your photo library.
+
+■ Recent History
+Quickly reopen recently edited images to speed up batch processing.
+
+[Who it's for]
+• Independent app developers
+• Anyone who needs clean, correctly sized screenshots fast
+• Those who prefer simple tools without unnecessary features
+
+No ads. No in-app purchases. Completely free.

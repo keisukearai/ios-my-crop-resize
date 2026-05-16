@@ -12,13 +12,14 @@ platform :ios do
 
   # App Store Connect にアプリを新規登録
   lane :register_app do
+    api_key  # グローバルコンテキストに設定
     produce(
-      api_key: api_key,
       app_name: "MyCropResize",
       app_identifier: "com.keisukearai.MyCropResize",
       language: "Japanese",
       app_version: "1.0",
       sku: "mycropresize-001",
+      skip_devcenter: true,  # App ID は Xcode 側で作成済み
     )
   end
 
