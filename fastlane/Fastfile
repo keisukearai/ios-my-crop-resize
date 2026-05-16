@@ -138,24 +138,52 @@ platform :ios do
     end
   end
 
-  # PREPARE_FOR_SUBMISSION 状態のバージョンを審査提出
+  # PREPARE_FOR_SUBMISSION 状態のバージョンを審査提出（新 reviewSubmissions API）
   def submit_version(client, app_id)
     versions = client[:get].call("/v1/apps/#{app_id}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION")
     version = versions["data"]&.first
     UI.user_error!("No version in PREPARE_FOR_SUBMISSION state found") unless version
     version_id = version["id"]
-    UI.message("Submitting version #{version.dig('attributes', 'versionString')} (#{version_id}) for review...")
+    UI.message("Found version #{version.dig('attributes', 'versionString')} (#{version_id})")
 
-    code, result = client[:post].call("/v1/appStoreVersionSubmissions", {
+    # 既存の提出物を確認
+    subs = client[:get].call("/v1/reviewSubmissions?filter[app]=#{app_id}&filter[platform]=IOS&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW")
+    submission_id = subs.dig("data", 0, "id")
+
+    unless submission_id
+      code, result = client[:post].call("/v1/reviewSubmissions", {
+        data: {
+          type: "reviewSubmissions",
+          attributes: { platform: "IOS" },
+          relationships: { app: { data: { type: "apps", id: app_id } } }
+        }
+      }.to_json)
+      UI.user_error!("Failed to create review submission: #{result}") unless code == 201
+      submission_id = result.dig("data", "id")
+      UI.message("Created review submission #{submission_id}")
+    end
+
+    # バージョンをアイテムとして追加
+    code, result = client[:post].call("/v1/reviewSubmissionItems", {
       data: {
-        type: "appStoreVersionSubmissions",
+        type: "reviewSubmissionItems",
         relationships: {
+          reviewSubmission: { data: { type: "reviewSubmissions", id: submission_id } },
           appStoreVersion: { data: { type: "appStoreVersions", id: version_id } }
         }
       }
     }.to_json)
+    UI.user_error!("Failed to add item: #{result}") unless [201, 409].include?(code)
 
-    code == 201 ? UI.success("Submitted for review!") : UI.user_error!("Failed to submit: #{result}")
+    # 審査提出
+    code, result = client[:patch].call("/v1/reviewSubmissions/#{submission_id}", {
+      data: {
+        type: "reviewSubmissions",
+        id: submission_id,
+        attributes: { submitted: true }
+      }
+    }.to_json)
+    code == 200 ? UI.success("Submitted for review!") : UI.user_error!("Failed to submit: #{result}")
   end
 
   # 年齢レーティング 4+ を設定（appInfos 経由）
